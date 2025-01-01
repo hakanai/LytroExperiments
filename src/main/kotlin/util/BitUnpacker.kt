@@ -5,7 +5,7 @@ import metadata.enums.Endianness
 /**
  * Helper to assist with reading arbitrary bit length values from a stream of bytes.
  */
-sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: Int) {
+sealed class BitUnpacker(val packedBlockSize: Int, val unpackedBlockSize: Int) {
 
     abstract fun unpackImpl(packed: ByteArray, unpacked: IntArray)
 
@@ -17,17 +17,11 @@ sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: I
      *        a new one will be created.
      * @return the unpacked block to use.
      */
-    fun unpack(packedBlock: ByteArray, unpackedBlock: IntArray?): IntArray {
+    fun unpack(packedBlock: ByteArray, unpackedBlock: IntArray) {
         require(packedBlock.size == packedBlockSize) { "Packed block size must be $packedBlockSize" }
-        val safeUnpackedBlock = if (unpackedBlock == null || unpackedBlock.size != unpackedBlockSize) {
-            IntArray(unpackedBlockSize)
-        } else {
-            unpackedBlock
-        }
-        unpackImpl(packedBlock, safeUnpackedBlock)
-        return safeUnpackedBlock
+        require(unpackedBlock.size == unpackedBlockSize) { "Unpacked block size must be $unpackedBlockSize" }
+        unpackImpl(packedBlock, unpackedBlock)
     }
-
 
     companion object {
 
@@ -38,8 +32,9 @@ sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: I
          * @param endianness the endianness used when packing the bits.
          * @return the unpack helper to use for those settings.
          */
-        fun create(bitsPerValue: Int, endianness: Endianness): BitUnpackHelper2 = when (bitsPerValue) {
+        fun create(bitsPerValue: Int, endianness: Endianness): BitUnpacker = when (bitsPerValue) {
             8 -> Packed8
+
             10 -> when (endianness) {
                 Endianness.BIG -> TODO("Have never seen Packed10Big")
                 Endianness.LITTLE -> Packed10Little
@@ -61,13 +56,13 @@ sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: I
         private fun Byte.safeToInt() = toInt().and(0b11111111)
     }
 
-    private data object Packed8 : BitUnpackHelper2(packedBlockSize = 1, unpackedBlockSize = 1) {
+    private data object Packed8 : BitUnpacker(packedBlockSize = 1, unpackedBlockSize = 1) {
         override fun unpackImpl(packed: ByteArray, unpacked: IntArray) {
             unpacked[0] = packed[0].safeToInt()
         }
     }
 
-    private data object Packed10Little : BitUnpackHelper2(packedBlockSize = 5, unpackedBlockSize = 4) {
+    private data object Packed10Little : BitUnpacker(packedBlockSize = 5, unpackedBlockSize = 4) {
         override fun unpackImpl(packed: ByteArray, unpacked: IntArray) {
             val p0 = packed[0].safeToInt()
             val p1 = packed[1].safeToInt()
@@ -81,6 +76,7 @@ sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: I
             //   | 00000000 | 11111111 | 22222222 | 33333333 | 33221100 |
             //   +----------+----------+----------+----------+----------+
             // Because it's this unusual structure, we can't guess what big-endian might look like.
+            // Perhaps it's the same but with the order of the 5th byte flipped. I'd want to find a sample.
             unpacked[0] = p0.shl(2) or p4.and(0b11)
             unpacked[1] = p1.shl(2) or p4.shr(2).and(0b11)
             unpacked[2] = p2.shl(2) or p4.shr(4).and(0b11)
@@ -88,7 +84,7 @@ sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: I
         }
     }
 
-    private data object Packed12Big : BitUnpackHelper2(packedBlockSize = 3, unpackedBlockSize = 2) {
+    private data object Packed12Big : BitUnpacker(packedBlockSize = 3, unpackedBlockSize = 2) {
         override fun unpackImpl(packed: ByteArray, unpacked: IntArray) {
             val p0 = packed[0].safeToInt()
             val p1 = packed[1].safeToInt()
@@ -99,13 +95,13 @@ sealed class BitUnpackHelper2(val packedBlockSize: Int, val unpackedBlockSize: I
         }
     }
 
-    private data object Packed16Big : BitUnpackHelper2(packedBlockSize = 2, unpackedBlockSize = 1) {
+    private data object Packed16Big : BitUnpacker(packedBlockSize = 2, unpackedBlockSize = 1) {
         override fun unpackImpl(packed: ByteArray, unpacked: IntArray) {
             unpacked[0] = packed[0].safeToInt().shl(8) or packed[1].safeToInt()
         }
     }
 
-    private data object Packed16Little : BitUnpackHelper2(packedBlockSize = 2, unpackedBlockSize = 1) {
+    private data object Packed16Little : BitUnpacker(packedBlockSize = 2, unpackedBlockSize = 1) {
         override fun unpackImpl(packed: ByteArray, unpacked: IntArray) {
             unpacked[0] = packed[0].safeToInt() or packed[1].safeToInt().shl(8)
         }

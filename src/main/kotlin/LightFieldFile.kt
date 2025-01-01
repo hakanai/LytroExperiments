@@ -8,22 +8,25 @@ import okio.buffer
 import util.readNullTerminatedUtf8
 import util.roundUpToMultipleOf
 
-class LightFieldFile(private val fileHandle: FileHandle): Closeable {
-    val blocks: List<Block> = readBlocks()
+/**
+ * Represents a single Lytro light field file.
+ */
+class LightFieldFile private constructor(private val fileHandle: FileHandle): Closeable {
 
-    val mainMetadata = MainMetadata.readFrom(this)
-
-    private fun readBlocks(): List<Block> {
+    /**
+     * All blocks found in the file.
+     */
+    val blocks: List<Block> by lazy {
         val source = fileHandle.source().buffer()
         val blockHeaderBuffer = Buffer()
         val nameBuffer = Buffer()
-        return buildList {
+        buildList {
             while (!source.exhausted()) {
                 blockHeaderBuffer.clear()
                 source.readFully(blockHeaderBuffer, 16)
                 val blockHeader = BlockHeader.readFrom(blockHeaderBuffer)
 
-                if (blockHeader.magic == BlockMagic.PACKAGE) {
+                if (blockHeader.magic == BlockHeader.Magic.PACKAGE) {
                     add(Block.WithHeaderOnly(blockHeader))
                 } else {
                     nameBuffer.clear()
@@ -43,11 +46,16 @@ class LightFieldFile(private val fileHandle: FileHandle): Closeable {
     }
 
     /**
+     * The main metadata for the file.
+     */
+    val mainMetadata by lazy { MainMetadata.readFrom(this) }
+
+    /**
      * Finds a data block by its reference name.
      *
      * @param referenceName the reference name to look up. See [MainMetadata.FrameReferenceNames] for known values.
      * @return the data block.
-     * @throws IllegalStateException if the block is missing.
+     * @throws IllegalStateException if the block is missing. XXX: Not sure whether this is an IAE or an ISE, really.
      */
     fun findDataBlock(referenceName: String): Block.WithData {
         val blockName = mainMetadata.frames[0].frame[referenceName]
@@ -77,6 +85,13 @@ class LightFieldFile(private val fileHandle: FileHandle): Closeable {
     }
 
     companion object {
+        /**
+         * Opens the light field file from the given path.
+         *
+         * @param path the path to an LFP file.
+         * @return the [LightFieldFile]. Generally you should call [use] on it to ensure it is
+         *         safely closed.
+         */
         fun open(path: Path) = LightFieldFile(FileSystem.SYSTEM.openReadOnly(path))
     }
 }

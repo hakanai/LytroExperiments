@@ -1,8 +1,11 @@
 package metadata
 
-data class AberrationCorrectrionMetadata(
+import LightFieldFile
+import kotlinx.serialization.json.Json
 
+class AberrationCorrectionMetadata(
     /*
+    TODO: Switch to `data class` and here's some sample data:
 {
     "master": {
         "picture": {
@@ -185,4 +188,13 @@ data class AberrationCorrectrionMetadata(
 
      */
 ) {
+    companion object {
+        fun readFrom(lightFieldFile: LightFieldFile): AberrationCorrectionMetadata {
+            val metadataBlock =
+                lightFieldFile.findDataBlock(MainMetadata.FrameReferenceNames.ABERRATION_CORRECTION_METADATA_REF)
+            val json = lightFieldFile.readData(metadataBlock).readUtf8()
+//            println("Raw JSON of metadata: $json")
+            return Json.decodeFromString(json)
+        }
+    }
 }

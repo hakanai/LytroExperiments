@@ -1,4 +1,4 @@
-package metadata
+package metadata.enums
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
